@@ -16,7 +16,7 @@ router.get("/seances/film/:film_id", seanceController.getSeancesByFilm);
 router.get("/seances/:id/places", seanceController.getPlacesDisponibles);
 
 // Routes protégées (lecture pour tous, écriture pour agent/admin)
-router.get("/seances", verifyToken, seanceController.getAllSeances);
+router.get("/seances", seanceController.getAllSeances);
 router.get("/seances/:id", verifyToken, seanceController.getSeanceById);
 router.post("/seances", verifyToken, requireAgentOrAdmin, seanceController.createSeance);
 router.put("/seances/:id", verifyToken, requireAgentOrAdmin, seanceController.updateSeance);
