@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestion des Films - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="agent-salles.html">Salles</a>
+        <a href="agent-seances.html">Séances</a>
+        <a href="agent-reservations.html">Réservations</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card">
+      <div class="section-title">
+        <h1>🎬 Gestion des Films</h1>
+        <button class="btn btn-primary" onclick="openAddModal()">+ Ajouter un film</button>
+      </div>
+      <div id="msgFilm"></div>
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Rechercher un film..." oninput="filterFilms()">
+      </div>
+      <div id="filmsList"><div class="loading">Chargement...</div></div>
+    </div>
+  </div>
+
+  <div id="filmModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <h3 id="modalTitle">Ajouter un film</h3>
+      <div id="msgModal"></div>
+      <div class="form-group"><label>Titre *</label><input type="text" id="filmTitre" placeholder="Titre du film"></div>
+      <div class="form-group"><label>Description</label><textarea id="filmDescription" rows="3" placeholder="Synopsis..."></textarea></div>
+      <div class="form-group"><label>Genre</label><input type="text" id="filmGenre" placeholder="Action, Comédie..."></div>
+      <div class="form-group"><label>Durée (minutes) *</label><input type="number" id="filmDuree" min="30" max="300" value="120"></div>
+      <div class="form-group"><label>Classification</label>
+        <select id="filmClassification">
+          <option value="Tous publics">Tous publics</option>
+          <option value="Déconseillé -10">Déconseillé -10 ans</option>
+          <option value="Déconseillé -13">Déconseillé -13 ans</option>
+          <option value="Déconseillé -16">Déconseillé -16 ans</option>
+          <option value="Interdit -18">Interdit -18 ans</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Catégorie</label><select id="filmCategorie"><option value="">-- Choisir --</option></select></div>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button class="btn btn-primary" onclick="saveFilm()">💾 Enregistrer</button>
+        <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+    const roleId = user.roleId ?? user.role?.id;
+    if (roleId == 1) window.location.href = 'films.html';
+    function logout() { localStorage.clear(); window.location.href = 'auth.html'; }
+
+    let allFilms = [], editingId = null;
+
+    function showMsg(id, msg, isError=false) {
+      const el = document.getElementById(id);
+      el.className = 'alert '+(isError?'alert-danger':'alert-success');
+      el.textContent = msg; el.style.display = 'block';
+      setTimeout(()=>el.style.display='none', 4000);
+    }
+
+    async function loadCategories() {
+      try {
+        const res = await fetch('/api/categories');
+        const cats = await res.json();
+        const sel = document.getElementById('filmCategorie');
+        cats.forEach(c => sel.innerHTML += `<option value="${c.id}">${c.nom}</option>`);
+      } catch(e) {}
+    }
+
+    async function loadFilms() {
+      const res = await fetch('/api/films');
+      allFilms = await res.json();
+      renderFilms(allFilms);
+    }
+
+    function filterFilms() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      renderFilms(allFilms.filter(f => f.titre.toLowerCase().includes(q)));
+    }
+
+    function renderFilms(films) {
+      if (!films.length) { document.getElementById('filmsList').innerHTML = '<div class="empty-state"><div class="icon">🎬</div><p>Aucun film trouvé.</p></div>'; return; }
+      document.getElementById('filmsList').innerHTML = `<table class="data-table">
+        <thead><tr><th>Titre</th><th>Genre</th><th>Durée</th><th>Classification</th><th>Actions</th></tr></thead>
+        <tbody>${films.map(f => `
+          <tr>
+            <td><strong>${f.titre}</strong></td>
+            <td>${f.genre ?? '—'}</td>
+            <td>${f.duree_min} min</td>
+            <td>${f.classification ?? '—'}</td>
+            <td class="table-actions">
+              <button class="btn btn-warning btn-sm" onclick="openEditModal(${f.id})">✏️</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteFilm(${f.id})">🗑️</button>
+            </td>
+          </tr>`).join('')}
+        </tbody></table>`;
+    }
+
+    function openAddModal() {
+      editingId = null;
+      document.getElementById('modalTitle').textContent = 'Ajouter un film';
+      ['filmTitre','filmDescription','filmGenre'].forEach(id => document.getElementById(id).value='');
+      document.getElementById('filmDuree').value = 120;
+      document.getElementById('filmClassification').value = 'Tous publics';
+      document.getElementById('filmModal').style.display = 'flex';
+    }
+
+    function openEditModal(id) {
+      const f = allFilms.find(f=>f.id===id); if(!f) return;
+      editingId = id;
+      document.getElementById('modalTitle').textContent = 'Modifier le film';
+      document.getElementById('filmTitre').value = f.titre;
+      document.getElementById('filmDescription').value = f.description ?? '';
+      document.getElementById('filmGenre').value = f.genre ?? '';
+      document.getElementById('filmDuree').value = f.duree_min;
+      document.getElementById('filmClassification').value = f.classification ?? 'Tous publics';
+      document.getElementById('filmCategorie').value = f.categorie_id ?? '';
+      document.getElementById('filmModal').style.display = 'flex';
+    }
+
+    function closeModal() { document.getElementById('filmModal').style.display='none'; editingId=null; }
+
+    async function saveFilm() {
+      const body = {
+        titre: document.getElementById('filmTitre').value,
+        description: document.getElementById('filmDescription').value,
+        genre: document.getElementById('filmGenre').value,
+        duree_min: parseInt(document.getElementById('filmDuree').value),
+        classification: document.getElementById('filmClassification').value,
+        categorie_id: document.getElementById('filmCategorie').value || null
+      };
+      if (!body.titre) { showMsg('msgModal','Le titre est requis',true); return; }
+      const url = editingId ? `/api/films/${editingId}` : '/api/films';
+      const method = editingId ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, headers: {'Content-Type':'application/json', Authorization:`Bearer ${token}`}, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (res.ok) { closeModal(); showMsg('msgFilm', editingId?'✅ Film modifié !':'✅ Film ajouté !'); loadFilms(); }
+      else showMsg('msgModal', data.message||'Erreur', true);
+    }
+
+    async function deleteFilm(id) {
+      if (!confirm('Supprimer ce film ?')) return;
+      const res = await fetch(`/api/films/${id}`, { method:'DELETE', headers:{Authorization:`Bearer ${token}`} });
+      if (res.ok) { showMsg('msgFilm','✅ Film supprimé'); loadFilms(); }
+      else { const d=await res.json(); showMsg('msgFilm', d.message||'Erreur', true); }
+    }
+
+    loadCategories(); loadFilms();
+  </script>
+</body>
+</html>

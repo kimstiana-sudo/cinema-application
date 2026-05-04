@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mes Réservations - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="films.html">Films</a>
+        <a href="billets.html">Mes billets</a>
+        <a href="profil.html">Mon profil</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card">
+      <div class="section-title">
+        <h1>📋 Mes Réservations</h1>
+        <a href="films.html" class="btn btn-primary btn-sm">+ Nouvelle réservation</a>
+      </div>
+      <div id="msgResv"></div>
+      <div id="reservationsList"><div class="loading">Chargement...</div></div>
+    </div>
+  </div>
+
+  <div id="cancelModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <h3>❌ Annuler la réservation ?</h3>
+      <p style="color:#666;margin:12px 0;">Êtes-vous sûr de vouloir annuler cette réservation ? Les places seront libérées.</p>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button class="btn btn-danger" onclick="confirmCancel()">Oui, annuler</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('cancelModal').style.display='none'">Non, garder</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+    function logout() { localStorage.clear(); window.location.href = 'auth.html'; }
+
+    let cancelId = null;
+
+    function showMsg(msg, isError=false) {
+      const el=document.getElementById('msgResv'); el.className='alert '+(isError?'alert-danger':'alert-success');
+      el.textContent=msg; el.style.display='block'; setTimeout(()=>el.style.display='none',5000);
+    }
+
+    async function loadReservations() {
+      try {
+        const res = await fetch('/api/reservations/user', { headers: { Authorization:`Bearer ${token}` } });
+        if (!res.ok) throw new Error();
+        const reservations = await res.json();
+        const container = document.getElementById('reservationsList');
+        if (!reservations.length) {
+          container.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>Vous n'avez aucune réservation.<br>Explorez nos films et réservez vos places !</p><a href="films.html" class="btn btn-primary" style="margin-top:14px;">🎬 Voir les films</a></div>`;
+          return;
+        }
+        container.innerHTML = reservations.map(r => {
+          const dateResv = new Date(r.date_reservation??r.createdAt).toLocaleString('fr-FR');
+          const dateSeance = new Date(r.seance?.dateHeure).toLocaleString('fr-FR');
+          const places = r.places?.map(p=>`Rang ${p.rang}-${p.numero}`).join(', ') ?? `${r.nombrePlace} place(s)`;
+          const total = ((r.seance?.prix??0) * (r.places?.length || r.nombrePlace || 1)).toFixed(2);
+          let actions = '';
+          if (r.statut==='CONFIRMEE') {
+            actions += `<button class="btn btn-success btn-sm" onclick="payer(${r.id})">💳 Payer (${total} $)</button>`;
+            actions += `<button class="btn btn-danger btn-sm" onclick="demandAnnulation(${r.id})">❌ Annuler</button>`;
+          } else if (r.statut==='PAYEE') {
+            actions += `<a href="billets.html" class="btn btn-primary btn-sm">🎟️ Voir mon billet</a>`;
+          }
+          return `<div class="reservation-card ${r.statut?.toLowerCase()??''}">
+            <div class="reservation-header">
+              <div class="reservation-title">${r.seance?.film?.titre??'Film'}</div>
+              <span class="badge badge-${r.statut?.toLowerCase()??''}">${r.statut}</span>
+            </div>
+            <p style="font-size:14px;color:#555;margin-bottom:8px;">
+              📅 <strong>Séance :</strong> ${dateSeance}<br>
+              🏛️ <strong>Salle :</strong> ${r.seance?.salle?.nom??'N/A'}<br>
+              💺 <strong>Places :</strong> ${places}<br>
+              💰 <strong>Total :</strong> ${total} $<br>
+              🕐 <strong>Réservé le :</strong> ${dateResv}
+            </p>
+            <div class="reservation-actions">${actions}</div>
+          </div>`;
+        }).join('');
+      } catch(e) { document.getElementById('reservationsList').innerHTML='<div class="alert alert-danger">Erreur de chargement.</div>'; }
+    }
+
+    function payer(id) { window.location.href=`paiement.html?reservationId=${id}`; }
+
+    function demandAnnulation(id) { cancelId=id; document.getElementById('cancelModal').style.display='flex'; }
+
+    async function confirmCancel() {
+      document.getElementById('cancelModal').style.display='none';
+      try {
+        const res = await fetch(`/api/reservations/${cancelId}`, { method:'DELETE', headers:{Authorization:`Bearer ${token}`} });
+        const data = await res.json();
+        if (res.ok) { showMsg('✅ Réservation annulée avec succès.'); loadReservations(); }
+        else showMsg(data.message||'Erreur lors de l\'annulation', true);
+      } catch(e) { showMsg('Erreur réseau', true); }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadReservations);
+  </script>
+</body>
+</html>

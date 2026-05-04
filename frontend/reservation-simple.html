@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Choisir mes places - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="seances.html">Séances</a>
+        <a href="reservation.html">Mes réservations</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card">
+      <h1>💺 Choisir vos places</h1>
+      <div id="seanceInfo" style="background:#f8f9fa;border-radius:8px;padding:16px;margin-bottom:20px;"></div>
+      <div id="message"></div>
+
+      <div class="seat-legend">
+        <div class="legend-item"><div class="legend-box" style="background:#28a745;"></div> Disponible</div>
+        <div class="legend-item"><div class="legend-box" style="background:#dc3545;"></div> Occupé</div>
+        <div class="legend-item"><div class="legend-box" style="background:#ffc107;"></div> Sélectionné</div>
+      </div>
+
+      <div class="screen-bar">🎬 ÉCRAN</div>
+
+      <div class="seats-container">
+        <div id="seatsGrid"></div>
+      </div>
+
+      <div id="selectedInfo" style="margin-top:20px;padding:16px;background:#f0f9ff;border-radius:8px;display:none;">
+        <strong>Places sélectionnées :</strong> <span id="selectedList">—</span><br>
+        <strong>Total :</strong> <span id="totalPrice">—</span>
+      </div>
+
+      <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="btnConfirm" onclick="confirmerReservation()" disabled>✅ Confirmer la réservation</button>
+        <button class="btn btn-secondary" onclick="window.history.back()">← Retour</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+    const selectedSeanceId = localStorage.getItem('selectedSeanceId');
+    if (!selectedSeanceId) window.location.href = 'seances.html';
+    function logout() { localStorage.clear(); window.location.href = 'auth.html'; }
+
+    let selectedPlaces = [];
+    let seanceData = null;
+    let allPlaces = [];
+
+    function showMsg(text, isError=true) {
+      const el = document.getElementById('message');
+      el.className = 'alert '+(isError?'alert-danger':'alert-success');
+      el.textContent = text; el.style.display = 'block';
+    }
+
+    async function loadSeance() {
+      const [seanceRes, placesRes] = await Promise.all([
+        fetch(`/api/seances/${selectedSeanceId}`, { headers: { Authorization:`Bearer ${token}` } }),
+        fetch(`/api/places/seance/${selectedSeanceId}`, { headers: { Authorization:`Bearer ${token}` } })
+      ]);
+      seanceData = await seanceRes.json();
+      const placesData = await placesRes.json();
+      allPlaces = placesData.places ?? placesData ?? [];
+
+      document.getElementById('seanceInfo').innerHTML = `
+        <strong>🎬 ${seanceData.film?.titre}</strong> &nbsp;|&nbsp;
+        📅 ${new Date(seanceData.dateHeure).toLocaleString('fr-FR')} &nbsp;|&nbsp;
+        🏛️ ${seanceData.salle?.nom} &nbsp;|&nbsp;
+        💰 ${seanceData.prix} $ / place`;
+
+      renderSeats();
+    }
+
+    function renderSeats() {
+      const grid = document.getElementById('seatsGrid');
+      const rows = {};
+      allPlaces.forEach(p => { if (!rows[p.rang]) rows[p.rang] = []; rows[p.rang].push(p); });
+
+      grid.innerHTML = Object.keys(rows).sort().map(rang => `
+        <div class="seat-row">
+          <div class="row-label">${rang}</div>
+          ${rows[rang].sort((a,b)=>a.numero-b.numero).map(p => {
+            const state = p.disponible===false ? 'occupied' : selectedPlaces.includes(p.id) ? 'selected' : 'available';
+            return `<div class="seat ${state}" onclick="toggleSeat(${p.id})" title="Rang ${p.rang} - ${p.numero}">${p.numero}</div>`;
+          }).join('')}
+        </div>`).join('');
+    }
+
+    function toggleSeat(id) {
+      const place = allPlaces.find(p=>p.id===id);
+      if (!place || place.disponible===false) return;
+      if (selectedPlaces.includes(id)) {
+        selectedPlaces = selectedPlaces.filter(i=>i!==id);
+      } else {
+        selectedPlaces.push(id);
+      }
+      renderSeats();
+      updateSelection();
+    }
+
+    function updateSelection() {
+      const btn = document.getElementById('btnConfirm');
+      const info = document.getElementById('selectedInfo');
+      if (selectedPlaces.length) {
+        btn.disabled = false;
+        info.style.display = 'block';
+        const selPlaces = allPlaces.filter(p=>selectedPlaces.includes(p.id));
+        document.getElementById('selectedList').textContent = selPlaces.map(p=>`Rang ${p.rang}-${p.numero}`).join(', ');
+        document.getElementById('totalPrice').textContent = `${(seanceData.prix * selectedPlaces.length).toFixed(2)} $`;
+      } else {
+        btn.disabled = true;
+        info.style.display = 'none';
+      }
+    }
+
+    async function confirmerReservation() {
+      if (!selectedPlaces.length) { showMsg('Sélectionnez au moins une place.'); return; }
+      try {
+        const res = await fetch('/api/reservations', {
+          method:'POST',
+          headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
+          body: JSON.stringify({ seance_id: parseInt(selectedSeanceId), place_ids: selectedPlaces, utilisateur_id: user.id })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showMsg('✅ Réservation confirmée ! Redirection vers le paiement...', false);
+          setTimeout(() => window.location.href=`paiement.html?reservationId=${data.reservation?.id ?? data.id}`, 1500);
+        } else {
+          showMsg(data.message || 'Erreur lors de la réservation');
+        }
+      } catch(e) { showMsg('Erreur réseau'); }
+    }
+
+    loadSeance();
+  </script>
+</body>
+</html>

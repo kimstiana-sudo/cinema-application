@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestion des Salles - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="agent-films.html">Films</a>
+        <a href="agent-seances.html">Séances</a>
+        <a href="agent-reservations.html">Réservations</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card">
+      <div class="section-title">
+        <h1>🏛️ Gestion des Salles</h1>
+        <button class="btn btn-primary" onclick="openAddModal()">+ Nouvelle salle</button>
+      </div>
+      <div id="msgSalle"></div>
+      <div id="sallesList"><div class="loading">Chargement...</div></div>
+    </div>
+  </div>
+
+  <!-- Modal ajout/modif -->
+  <div id="salleModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <h3 id="modalTitle">Nouvelle Salle</h3>
+      <div id="msgModal"></div>
+      <div class="form-group"><label>Nom de la salle</label><input type="text" id="salleNom" placeholder="Ex: Salle 1"></div>
+      <div class="form-group"><label>Capacité totale</label><input type="number" id="salleCapacite" min="10" max="500" value="100"></div>
+      <div class="form-group"><label>Type de salle</label>
+        <select id="salleType">
+          <option value="standard">Standard</option>
+          <option value="vip">VIP</option>
+          <option value="imax">IMAX</option>
+          <option value="3d">3D</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button class="btn btn-primary" onclick="saveSalle()">💾 Enregistrer</button>
+        <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+    const roleId = user.roleId ?? user.role?.id;
+    if (roleId == 1) window.location.href = 'index.html';
+    function logout() { localStorage.clear(); window.location.href = 'auth.html'; }
+
+    let editingId = null;
+    let allSalles = [];
+
+    function showMsg(id, msg, isError = false) {
+      const el = document.getElementById(id);
+      el.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+      el.textContent = msg;
+      el.style.display = 'block';
+      setTimeout(() => el.style.display = 'none', 4000);
+    }
+
+    async function loadSalles() {
+      const res = await fetch('/api/salles', { headers: { Authorization: `Bearer ${token}` } });
+      allSalles = await res.json();
+      renderSalles(allSalles);
+    }
+
+    function renderSalles(salles) {
+      const el = document.getElementById('sallesList');
+      if (!salles.length) { el.innerHTML = '<div class="empty-state"><div class="icon">🏛️</div><p>Aucune salle. Créez la première !</p></div>'; return; }
+      el.innerHTML = `<table class="data-table">
+        <thead><tr><th>Nom</th><th>Capacité</th><th>Type</th><th>Places disponibles</th><th>Actions</th></tr></thead>
+        <tbody>${salles.map(s => `
+          <tr>
+            <td><strong>${s.nom}</strong></td>
+            <td>${s.capacite}</td>
+            <td>${s.type ?? 'Standard'}</td>
+            <td><span class="badge badge-confirmee">${s.capacite} places</span></td>
+            <td class="table-actions">
+              <button class="btn btn-warning btn-sm" onclick="openEditModal(${s.id})">✏️ Modifier</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteSalle(${s.id})">🗑️ Supprimer</button>
+            </td>
+          </tr>`).join('')}
+        </tbody></table>`;
+    }
+
+    function openAddModal() { editingId = null; document.getElementById('modalTitle').textContent = 'Nouvelle Salle'; document.getElementById('salleNom').value = ''; document.getElementById('salleCapacite').value = 100; document.getElementById('salleType').value = 'standard'; document.getElementById('salleModal').style.display = 'flex'; }
+    function openEditModal(id) {
+      const s = allSalles.find(s => s.id === id);
+      if (!s) return;
+      editingId = id;
+      document.getElementById('modalTitle').textContent = 'Modifier la Salle';
+      document.getElementById('salleNom').value = s.nom;
+      document.getElementById('salleCapacite').value = s.capacite;
+      document.getElementById('salleType').value = s.type ?? 'standard';
+      document.getElementById('salleModal').style.display = 'flex';
+    }
+    function closeModal() { document.getElementById('salleModal').style.display = 'none'; editingId = null; }
+
+    async function saveSalle() {
+      const body = { nom: document.getElementById('salleNom').value, capacite: parseInt(document.getElementById('salleCapacite').value), type: document.getElementById('salleType').value };
+      if (!body.nom) { showMsg('msgModal', 'Le nom est requis', true); return; }
+      try {
+        const url = editingId ? `/api/salles/${editingId}` : '/api/salles';
+        const method = editingId ? 'PUT' : 'POST';
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (res.ok) { closeModal(); showMsg('msgSalle', editingId ? '✅ Salle modifiée !' : '✅ Salle créée !'); loadSalles(); }
+        else showMsg('msgModal', data.message || 'Erreur', true);
+      } catch(e) { showMsg('msgModal', 'Erreur réseau', true); }
+    }
+
+    async function deleteSalle(id) {
+      if (!confirm('Supprimer cette salle ?')) return;
+      const res = await fetch(`/api/salles/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) { showMsg('msgSalle', '✅ Salle supprimée'); loadSalles(); }
+      else { const d = await res.json(); showMsg('msgSalle', d.message || 'Erreur', true); }
+    }
+
+    loadSalles();
+  </script>
+</body>
+</html>

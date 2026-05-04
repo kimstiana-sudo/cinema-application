@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Réservations - Agent - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="agent-films.html">Films</a>
+        <a href="agent-salles.html">Salles</a>
+        <a href="agent-seances.html">Séances</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card">
+      <div class="section-title">
+        <h1>📋 Toutes les Réservations</h1>
+        <span id="totalCount" style="color:#888;font-size:14px;"></span>
+      </div>
+      <div id="msgResv"></div>
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Rechercher..." oninput="filterResv()">
+        <select id="filterStatut" onchange="filterResv()">
+          <option value="">Tous les statuts</option>
+          <option value="CONFIRMEE">Confirmée</option>
+          <option value="PAYEE">Payée</option>
+          <option value="ANNULEE">Annulée</option>
+        </select>
+      </div>
+      <div id="resvList"><div class="loading">Chargement...</div></div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+    const roleId = user.roleId ?? user.role?.id;
+    if (roleId == 1) window.location.href = 'index.html';
+    function logout() { localStorage.clear(); window.location.href = 'auth.html'; }
+
+    let allResv = [];
+
+    function showMsg(id, msg, isError=false) {
+      const el=document.getElementById(id); el.className='alert '+(isError?'alert-danger':'alert-success');
+      el.textContent=msg; el.style.display='block'; setTimeout(()=>el.style.display='none',4000);
+    }
+
+    async function loadResv() {
+      const res = await fetch('/api/reservations', { headers: { Authorization:`Bearer ${token}` } });
+      allResv = await res.json();
+      if (!Array.isArray(allResv)) allResv = [];
+      document.getElementById('totalCount').textContent = `${allResv.length} réservation(s)`;
+      renderResv(allResv);
+    }
+
+    function filterResv() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const statut = document.getElementById('filterStatut').value;
+      let filtered = allResv;
+      if (statut) filtered = filtered.filter(r => r.statut === statut);
+      if (q) filtered = filtered.filter(r =>
+        (r.utilisateur?.nom??'').toLowerCase().includes(q) ||
+        (r.utilisateur?.prenom??'').toLowerCase().includes(q) ||
+        (r.seance?.film?.titre??'').toLowerCase().includes(q)
+      );
+      renderResv(filtered);
+    }
+
+    function renderResv(resv) {
+      if (!resv.length) { document.getElementById('resvList').innerHTML='<div class="empty-state"><div class="icon">📋</div><p>Aucune réservation trouvée.</p></div>'; return; }
+      document.getElementById('resvList').innerHTML = `<table class="data-table">
+        <thead><tr><th>Client</th><th>Film</th><th>Séance</th><th>Places</th><th>Statut</th><th>Actions</th></tr></thead>
+        <tbody>${resv.map(r=>`
+          <tr>
+            <td>${r.utilisateur?.prenom??''} ${r.utilisateur?.nom??''}</td>
+            <td>${r.seance?.film?.titre??'—'}</td>
+            <td>${r.seance ? new Date(r.seance.dateHeure).toLocaleString('fr-FR') : '—'}</td>
+            <td>${r.places?.length ?? r.nombrePlace ?? '—'}</td>
+            <td><span class="badge badge-${r.statut?.toLowerCase()??''}">${r.statut}</span></td>
+            <td class="table-actions">
+              ${r.statut==='CONFIRMEE'?`<button class="btn btn-success btn-sm" onclick="changerStatut(${r.id},'PAYEE')">✅ Payée</button>`:''}
+              ${r.statut!=='ANNULEE'?`<button class="btn btn-danger btn-sm" onclick="changerStatut(${r.id},'ANNULEE')">❌ Annuler</button>`:''}
+            </td>
+          </tr>`).join('')}
+        </tbody></table>`;
+    }
+
+    async function changerStatut(id, statut) {
+      if (!confirm(`Changer le statut en "${statut}" ?`)) return;
+      const res = await fetch(`/api/reservations/${id}/statut`, {
+        method: 'PUT',
+        headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+        body: JSON.stringify({ statut })
+      });
+      if (res.ok) { showMsg('msgResv', '✅ Statut mis à jour'); loadResv(); }
+      else { const d=await res.json(); showMsg('msgResv', d.message||'Erreur', true); }
+    }
+
+    loadResv();
+  </script>
+</body>
+</html>

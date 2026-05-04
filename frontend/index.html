@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎬 Cinéma - Accueil</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links" id="navLinks">
+        <a href="films.html">Films</a>
+        <a href="seances.html">Séances</a>
+        <a href="reservation.html">Mes réservations</a>
+        <a href="profil.html">Mon profil</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="hero">
+      <h1>🎭 Bienvenue au CinéMax</h1>
+      <p>Réservez vos places en ligne, choisissez vos séances et profitez du cinéma !</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <h3>Films disponibles</h3>
+        <p id="filmsCount">—</p>
+      </div>
+      <div class="stat-card">
+        <h3>Séances à venir</h3>
+        <p id="seancesCount">—</p>
+      </div>
+      <div class="stat-card">
+        <h3>Mes réservations</h3>
+        <p id="reservationsCount">—</p>
+      </div>
+      <div class="stat-card" id="sallesStatCard">
+        <h3>Salles</h3>
+        <p id="sallesCount">—</p>
+      </div>
+    </div>
+
+    <div class="actions-grid" id="actionsGrid">
+      <a href="films.html" class="action-card">
+        <div class="icon">🎬</div>
+        <span>Voir les films</span>
+      </a>
+      <a href="seances.html" class="action-card">
+        <div class="icon">🎫</div>
+        <span>Réserver une place</span>
+      </a>
+      <a href="reservation.html" class="action-card">
+        <div class="icon">📋</div>
+        <span>Mes réservations</span>
+      </a>
+      <a href="billets.html" class="action-card">
+        <div class="icon">🎟️</div>
+        <span>Mes billets</span>
+      </a>
+    </div>
+
+    <!-- Actions agent -->
+    <div id="agentActions" class="actions-grid" style="display:none">
+      <a href="agent-films.html" class="action-card">
+        <div class="icon">🎞️</div>
+        <span>Gérer les films</span>
+      </a>
+      <a href="agent-salles.html" class="action-card">
+        <div class="icon">🏛️</div>
+        <span>Gérer les salles</span>
+      </a>
+      <a href="agent-seances.html" class="action-card">
+        <div class="icon">📅</div>
+        <span>Gérer les séances</span>
+      </a>
+      <a href="agent-reservations.html" class="action-card">
+        <div class="icon">📊</div>
+        <span>Réservations</span>
+      </a>
+    </div>
+
+    <!-- Actions admin -->
+    <div id="adminActions" class="actions-grid" style="display:none">
+      <a href="admin-dashboard.html" class="action-card">
+        <div class="icon">📈</div>
+        <span>Tableau de bord</span>
+      </a>
+      <a href="admin-users.html" class="action-card">
+        <div class="icon">👥</div>
+        <span>Gérer utilisateurs</span>
+      </a>
+      <a href="agent-films.html" class="action-card">
+        <div class="icon">🎞️</div>
+        <span>Gérer les films</span>
+      </a>
+      <a href="agent-salles.html" class="action-card">
+        <div class="icon">🏛️</div>
+        <span>Gérer les salles</span>
+      </a>
+    </div>
+
+    <div class="page-card">
+      <h2>🎬 Films à l'affiche</h2>
+      <div class="films-grid" id="recentFilms">
+        <div class="loading">Chargement...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+
+    const roleId = user.roleId ?? user.role?.id;
+
+    if (roleId == 2) document.getElementById('agentActions').style.display = 'grid';
+    if (roleId == 3) { document.getElementById('agentActions').style.display = 'grid'; document.getElementById('adminActions').style.display = 'grid'; }
+
+    async function loadStats() {
+      try {
+        const [filmsRes, seancesRes, resvRes] = await Promise.all([
+          fetch('/api/films'),
+          fetch('/api/seances', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/reservations/user', { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+        const films = await filmsRes.json();
+        const seances = await seancesRes.json();
+        const resv = await resvRes.json();
+        document.getElementById('filmsCount').textContent = films.length ?? 0;
+        document.getElementById('seancesCount').textContent = Array.isArray(seances) ? seances.length : 0;
+        document.getElementById('reservationsCount').textContent = Array.isArray(resv) ? resv.length : 0;
+
+        // Films à l'affiche
+        const grid = document.getElementById('recentFilms');
+        grid.innerHTML = '';
+        films.slice(0, 6).forEach(film => {
+          grid.innerHTML += `
+            <div class="film-card">
+              <span class="genre-badge">${film.categorie?.nom ?? film.genre ?? 'Cinéma'}</span>
+              <h3>${film.titre}</h3>
+              <p class="film-meta">⏱ ${film.duree_min} min &nbsp;|&nbsp; 🎭 ${film.classification ?? 'Tous publics'}</p>
+              <p style="margin-bottom:12px;font-size:13px;color:#666;">${(film.description ?? '').substring(0,100)}${film.description?.length > 100 ? '...' : ''}</p>
+              <button class="btn btn-primary btn-sm" onclick="window.location.href='seances.html?film_id=${film.id}'">Réserver</button>
+              <button class="btn btn-secondary btn-sm" onclick="window.location.href='film-detail.html?id=${film.id}'">Détails</button>
+            </div>`;
+        });
+      } catch(e) { console.error(e); }
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = 'auth.html';
+    }
+
+    loadStats();
+  </script>
+</body>
+</html>

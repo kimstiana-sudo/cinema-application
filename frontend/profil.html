@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mon Profil - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="films.html">Films</a>
+        <a href="reservation.html">Mes réservations</a>
+        <a href="billets.html">Mes billets</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div id="profileHeader" class="profile-header">
+      <div class="profile-avatar" id="avatarInitials">?</div>
+      <div>
+        <div class="profile-name" id="profileName">Chargement...</div>
+        <div class="profile-role" id="profileRole"></div>
+        <div style="font-size:13px;opacity:0.8;margin-top:4px;" id="profileEmail"></div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;" class="profile-grid">
+      <div class="page-card">
+        <h2>✏️ Modifier mes informations</h2>
+        <div id="msgProfil"></div>
+        <div class="form-group">
+          <label>Nom</label>
+          <input type="text" id="nom" placeholder="Votre nom">
+        </div>
+        <div class="form-group">
+          <label>Prénom</label>
+          <input type="text" id="prenom" placeholder="Votre prénom">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="email" placeholder="Votre email">
+        </div>
+        <div class="form-group">
+          <label>Réservations max simultanées</label>
+          <input type="number" id="max_reservations" min="1" max="10">
+        </div>
+        <button class="btn btn-primary" onclick="updateProfile()">💾 Sauvegarder</button>
+      </div>
+
+      <div class="page-card">
+        <h2>🔐 Changer le mot de passe</h2>
+        <div id="msgPassword"></div>
+        <div class="form-group">
+          <label>Nouveau mot de passe</label>
+          <input type="password" id="newPassword" placeholder="Nouveau mot de passe">
+        </div>
+        <div class="form-group">
+          <label>Confirmer le mot de passe</label>
+          <input type="password" id="confirmPassword" placeholder="Confirmer">
+        </div>
+        <button class="btn btn-warning" onclick="changePassword()">🔑 Changer le mot de passe</button>
+
+        <hr>
+        <h2 style="margin-top:20px;">📊 Mes statistiques</h2>
+        <div id="userStats" style="margin-top:12px;"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+
+    function logout() { localStorage.clear(); window.location.href = 'auth.html'; }
+
+    function showMsg(id, msg, isError = false) {
+      const el = document.getElementById(id);
+      el.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+      el.textContent = msg;
+      el.style.display = 'block';
+      setTimeout(() => el.style.display = 'none', 4000);
+    }
+
+    async function loadProfile() {
+      try {
+        const res = await fetch(`/api/profile/${user.id}`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        document.getElementById('nom').value = data.nom || '';
+        document.getElementById('prenom').value = data.prenom || '';
+        document.getElementById('email').value = data.email || '';
+        document.getElementById('max_reservations').value = data.max_reservations || 3;
+        document.getElementById('profileName').textContent = `${data.prenom} ${data.nom}`;
+        document.getElementById('profileEmail').textContent = data.email;
+        document.getElementById('profileRole').textContent = data.role?.nom ?? 'Client';
+        const initials = (data.prenom?.[0] ?? '') + (data.nom?.[0] ?? '');
+        document.getElementById('avatarInitials').textContent = initials.toUpperCase();
+      } catch(e) { console.error(e); }
+
+      // Stats
+      try {
+        const res2 = await fetch('/api/reservations/user', { headers: { Authorization: `Bearer ${token}` } });
+        const resv = await res2.json();
+        const confirmees = resv.filter(r => r.statut === 'CONFIRMEE').length;
+        const payees = resv.filter(r => r.statut === 'PAYEE').length;
+        const annulees = resv.filter(r => r.statut === 'ANNULEE').length;
+        document.getElementById('userStats').innerHTML = `
+          <p>📋 Total réservations : <strong>${resv.length}</strong></p>
+          <p>✅ Confirmées : <strong>${confirmees}</strong></p>
+          <p>💳 Payées : <strong>${payees}</strong></p>
+          <p>❌ Annulées : <strong>${annulees}</strong></p>`;
+      } catch(e) {}
+    }
+
+    async function updateProfile() {
+      const body = {
+        nom: document.getElementById('nom').value,
+        prenom: document.getElementById('prenom').value,
+        email: document.getElementById('email').value,
+        max_reservations: parseInt(document.getElementById('max_reservations').value)
+      };
+      try {
+        const res = await fetch(`/api/profile/${user.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showMsg('msgProfil', '✅ Profil mis à jour avec succès !');
+          const updatedUser = { ...user, nom: body.nom, prenom: body.prenom, email: body.email };
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+        } else {
+          showMsg('msgProfil', data.message || 'Erreur lors de la mise à jour', true);
+        }
+      } catch(e) { showMsg('msgProfil', 'Erreur réseau', true); }
+    }
+
+    async function changePassword() {
+      const newPw = document.getElementById('newPassword').value;
+      const confirmPw = document.getElementById('confirmPassword').value;
+      if (newPw !== confirmPw) { showMsg('msgPassword', 'Les mots de passe ne correspondent pas', true); return; }
+      if (newPw.length < 6) { showMsg('msgPassword', 'Le mot de passe doit avoir au moins 6 caractères', true); return; }
+      try {
+        const res = await fetch(`/api/profile/${user.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ password: newPw })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showMsg('msgPassword', '✅ Mot de passe changé avec succès !');
+          document.getElementById('newPassword').value = '';
+          document.getElementById('confirmPassword').value = '';
+        } else showMsg('msgPassword', data.message || 'Erreur', true);
+      } catch(e) { showMsg('msgPassword', 'Erreur réseau', true); }
+    }
+
+    loadProfile();
+  </script>
+</body>
+</html>

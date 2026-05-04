@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Détail Film - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="films.html">Films</a>
+        <a href="reservation.html">Mes réservations</a>
+        <a href="profil.html">Mon profil</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card" id="filmDetail"><div class="loading">Chargement...</div></div>
+    <div class="page-card">
+      <h2>🎫 Prochaines séances</h2>
+      <div class="seances-grid" id="seancesFilm"><div class="loading">Chargement...</div></div>
+    </div>
+  </div>
+  <script>
+    const user=JSON.parse(localStorage.getItem('user'));
+    const token=localStorage.getItem('token');
+    if(!user||!token) window.location.href='auth.html';
+    function logout(){localStorage.clear();window.location.href='auth.html';}
+    const params=new URLSearchParams(window.location.search);
+    const id=params.get('id');
+    if(!id) window.location.href='films.html';
+
+    async function load(){
+      const [filmRes,seancesRes]=await Promise.all([
+        fetch(`/api/films/${id}`),
+        fetch(`/api/seances?film_id=${id}`,{headers:{Authorization:`Bearer ${token}`}})
+      ]);
+      const film=await filmRes.json();
+      const seances=await seancesRes.json();
+
+      document.getElementById('filmDetail').innerHTML=`
+        <div style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap;">
+          <div style="width:120px;height:160px;background:linear-gradient(135deg,#1a1a2e,#e63946);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:3rem;flex-shrink:0;">🎬</div>
+          <div style="flex:1;min-width:200px;">
+            <span class="genre-badge">${film.categorie?.nom??film.genre??'Cinéma'}</span>
+            <h1 style="margin:8px 0;">${film.titre}</h1>
+            <p class="film-meta">⏱ ${film.duree_min} min &nbsp;|&nbsp; 🎭 ${film.classification??'Tous publics'}</p>
+            <p style="margin:14px 0;line-height:1.7;color:#555;">${film.description??'Aucune description disponible.'}</p>
+            <button class="btn btn-primary" onclick="window.location.href='seances.html?film_id=${film.id}'">🎫 Voir toutes les séances</button>
+          </div>
+        </div>`;
+
+      const sel=document.getElementById('seancesFilm');
+      if(!Array.isArray(seances)||!seances.length){sel.innerHTML='<div class="empty-state"><div class="icon">📅</div><p>Aucune séance prévue pour ce film.</p></div>';return;}
+      sel.innerHTML=seances.slice(0,6).map(s=>`
+        <div class="seance-card">
+          <p>📅 <strong>${new Date(s.dateHeure).toLocaleString('fr-FR')}</strong></p>
+          <p>🏛️ ${s.salle?.nom??'N/A'}</p>
+          <p>💰 ${s.prix} $ | 💺 ${s.placesDisponibles??'?'} places dispo</p>
+          <button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px;" onclick="reserver(${s.id})">Réserver</button>
+        </div>`).join('');
+    }
+
+    function reserver(sid){localStorage.setItem('selectedSeanceId',sid);window.location.href='reservation-simple.html';}
+    load();
+  </script>
+</body>
+</html>

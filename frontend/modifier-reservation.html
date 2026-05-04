@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modifier Réservation - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="reservation.html">Mes réservations</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card" style="max-width:700px;margin:0 auto;">
+      <h1>✏️ Modifier une réservation</h1>
+      <div id="info"><div class="loading">Chargement...</div></div>
+      <div id="msg"></div>
+      <div id="seatsSection" style="display:none;">
+        <h2>💺 Choisir de nouvelles places</h2>
+        <div class="seat-legend">
+          <div class="legend-item"><div class="legend-box" style="background:#28a745;"></div> Disponible</div>
+          <div class="legend-item"><div class="legend-box" style="background:#dc3545;"></div> Occupé</div>
+          <div class="legend-item"><div class="legend-box" style="background:#ffc107;"></div> Sélectionné</div>
+        </div>
+        <div class="screen-bar">🎬 ÉCRAN</div>
+        <div id="seatsGrid"></div>
+        <div style="margin-top:20px;display:flex;gap:12px;">
+          <button class="btn btn-primary" onclick="modifier()">💾 Confirmer la modification</button>
+          <a href="reservation.html" class="btn btn-secondary">Annuler</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const user=JSON.parse(localStorage.getItem('user'));
+    const token=localStorage.getItem('token');
+    if(!user||!token) window.location.href='auth.html';
+    function logout(){localStorage.clear();window.location.href='auth.html';}
+    const params=new URLSearchParams(window.location.search);
+    const id=params.get('reservationId');
+    if(!id) window.location.href='reservation.html';
+
+    let resData=null, selectedPlaces=[], allPlaces=[];
+
+    function showMsg(msg,isError=false){const el=document.getElementById('msg');el.className='alert '+(isError?'alert-danger':'alert-success');el.textContent=msg;el.style.display='block';}
+
+    async function load(){
+      const res=await fetch(`/api/reservations/${id}`,{headers:{Authorization:`Bearer ${token}`}});
+      resData=await res.json();
+      if(resData.statut!=='CONFIRMEE'){document.getElementById('info').innerHTML='<div class="alert alert-danger">Seules les réservations confirmées peuvent être modifiées.</div>';return;}
+      document.getElementById('info').innerHTML=`<div class="payment-info"><strong>Film :</strong> ${resData.seance?.film?.titre??'—'}<br><strong>Séance :</strong> ${new Date(resData.seance?.dateHeure).toLocaleString('fr-FR')}<br><strong>Places actuelles :</strong> ${resData.places?.map(p=>`Rang ${p.rang}-${p.numero}`).join(', ')?? resData.nombrePlace+' place(s)'}</div>`;
+      document.getElementById('seatsSection').style.display='block';
+      // Load places
+      const pr=await fetch(`/api/places/seance/${resData.seance_id}`,{headers:{Authorization:`Bearer ${token}`}});
+      const pd=await pr.json(); allPlaces=pd.places??pd??[];
+      selectedPlaces=resData.places?.map(p=>p.id)??[];
+      renderSeats();
+    }
+
+    function renderSeats(){
+      const rows={};
+      allPlaces.forEach(p=>{if(!rows[p.rang])rows[p.rang]=[];rows[p.rang].push(p);});
+      document.getElementById('seatsGrid').innerHTML=Object.keys(rows).sort().map(rang=>`<div class="seat-row"><div class="row-label">${rang}</div>${rows[rang].sort((a,b)=>a.numero-b.numero).map(p=>{const st=p.disponible===false&&!selectedPlaces.includes(p.id)?'occupied':selectedPlaces.includes(p.id)?'selected':'available';return`<div class="seat ${st}" onclick="toggleSeat(${p.id})">${p.numero}</div>`;}).join('')}</div>`).join('');
+    }
+
+    function toggleSeat(id){
+      const p=allPlaces.find(p=>p.id===id);
+      if(!p||(p.disponible===false&&!selectedPlaces.includes(id)))return;
+      selectedPlaces=selectedPlaces.includes(id)?selectedPlaces.filter(i=>i!==id):[...selectedPlaces,id];
+      renderSeats();
+    }
+
+    async function modifier(){
+      if(!selectedPlaces.length){showMsg('Sélectionnez au moins une place.',true);return;}
+      const res=await fetch(`/api/reservations/${id}/modify`,{method:'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({place_ids:selectedPlaces})});
+      const data=await res.json();
+      if(res.ok){showMsg('✅ Réservation modifiée !');setTimeout(()=>window.location.href='reservation.html',2000);}
+      else showMsg(data.message||'Erreur lors de la modification',true);
+    }
+
+    load();
+  </script>
+</body>
+</html>

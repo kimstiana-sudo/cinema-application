@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Annuler Réservation - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="reservation.html">Mes réservations</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card" style="max-width:600px;margin:0 auto;">
+      <h1>❌ Annuler une réservation</h1>
+      <div id="info"><div class="loading">Chargement...</div></div>
+      <div id="msg"></div>
+      <div id="buttons" style="display:none;margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
+        <button class="btn btn-danger" onclick="annuler()">Oui, annuler cette réservation</button>
+        <a href="reservation.html" class="btn btn-secondary">Non, retourner</a>
+      </div>
+    </div>
+  </div>
+  <script>
+    const user=JSON.parse(localStorage.getItem('user'));
+    const token=localStorage.getItem('token');
+    if(!user||!token) window.location.href='auth.html';
+    function logout(){localStorage.clear();window.location.href='auth.html';}
+    const params=new URLSearchParams(window.location.search);
+    const id=params.get('reservationId');
+    if(!id) window.location.href='reservation.html';
+
+    function showMsg(msg,isError=false){const el=document.getElementById('msg');el.className='alert '+(isError?'alert-danger':'alert-success');el.textContent=msg;el.style.display='block';}
+
+    async function load(){
+      const res=await fetch(`/api/reservations/${id}`,{headers:{Authorization:`Bearer ${token}`}});
+      const r=await res.json();
+      document.getElementById('info').innerHTML=`<div class="alert alert-warning">⚠️ Êtes-vous sûr de vouloir annuler la réservation pour <strong>${r.seance?.film?.titre??'ce film'}</strong> le ${new Date(r.seance?.dateHeure).toLocaleString('fr-FR')} ?<br>Les places seront libérées.</div>`;
+      document.getElementById('buttons').style.display='flex';
+    }
+
+    async function annuler(){
+      const res=await fetch(`/api/reservations/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});
+      if(res.ok){showMsg('✅ Réservation annulée. Redirection...');setTimeout(()=>window.location.href='reservation.html',2000);}
+      else{const d=await res.json();showMsg(d.message||'Erreur',true);}
+    }
+    load();
+  </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Séances - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="films.html">Films</a>
+        <a href="reservation.html">Mes réservations</a>
+        <a href="profil.html">Mon profil</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card">
+      <div id="filmTitle"></div>
+      <h1>🎫 Séances disponibles</h1>
+      <div class="search-bar">
+        <select id="filterFilm" onchange="loadSeances()"><option value="">Tous les films</option></select>
+      </div>
+      <div class="seances-grid" id="seancesList"><div class="loading">Chargement...</div></div>
+    </div>
+  </div>
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+    function logout() { localStorage.clear(); window.location.href = 'auth.html'; }
+
+    const params = new URLSearchParams(window.location.search);
+    const paramFilmId = params.get('film_id');
+
+    async function init() {
+      const filmsRes = await fetch('/api/films');
+      const films = await filmsRes.json();
+      const sel = document.getElementById('filterFilm');
+      films.forEach(f => sel.innerHTML += `<option value="${f.id}" ${f.id==paramFilmId?'selected':''}>${f.titre}</option>`);
+      if (paramFilmId) {
+        const film = films.find(f=>f.id==paramFilmId);
+        if (film) document.getElementById('filmTitle').innerHTML = `<p style="color:#e63946;font-weight:600;margin-bottom:8px;">Film sélectionné :</p><h2 style="margin-bottom:20px;">${film.titre}</h2>`;
+      }
+      loadSeances();
+    }
+
+    async function loadSeances() {
+      const filmId = document.getElementById('filterFilm').value || paramFilmId;
+      const url = filmId ? `/api/seances?film_id=${filmId}` : '/api/seances';
+      try {
+        const res = await fetch(url, { headers: { Authorization:`Bearer ${token}` } });
+        const seances = await res.json();
+        const el = document.getElementById('seancesList');
+        if (!Array.isArray(seances) || !seances.length) {
+          el.innerHTML='<div class="empty-state"><div class="icon">📅</div><p>Aucune séance disponible pour ce film.</p></div>'; return;
+        }
+        el.innerHTML = seances.map(s => {
+          const dispo = s.placesDisponibles ?? s.salle?.capacite ?? '?';
+          const pct = s.salle?.capacite ? Math.round((dispo/s.salle.capacite)*100) : 100;
+          const couleur = pct > 50 ? '#28a745' : pct > 20 ? '#ffc107' : '#dc3545';
+          return `<div class="seance-card">
+            <h3>${s.film?.titre ?? '—'}</h3>
+            <p>📅 <strong>${new Date(s.dateHeure).toLocaleString('fr-FR')}</strong></p>
+            <p>🏛️ Salle : ${s.salle?.nom ?? 'N/A'}</p>
+            <p>💰 Prix : <strong>${s.prix} $</strong></p>
+            <p>💺 Places disponibles : <strong style="color:${couleur}">${dispo}</strong> / ${s.salle?.capacite??'?'}</p>
+            <div style="background:#f0f0f0;border-radius:4px;height:8px;margin:10px 0;">
+              <div style="width:${pct}%;background:${couleur};border-radius:4px;height:8px;"></div>
+            </div>
+            ${dispo > 0
+              ? `<button class="btn btn-primary" style="width:100%;margin-top:10px;" onclick="reserver(${s.id})">🎫 Choisir mes places</button>`
+              : `<button class="btn btn-secondary" style="width:100%;margin-top:10px;" disabled>❌ Complet</button>`
+            }
+          </div>`;
+        }).join('');
+      } catch(e) { document.getElementById('seancesList').innerHTML='<div class="alert alert-danger">Erreur de chargement.</div>'; }
+    }
+
+    function reserver(seanceId) {
+      localStorage.setItem('selectedSeanceId', seanceId);
+      window.location.href = 'reservation-simple.html';
+    }
+
+    init();
+  </script>
+</body>
+</html>

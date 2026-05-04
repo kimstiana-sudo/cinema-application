@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paiement - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="reservation.html">Mes réservations</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="payment-container">
+      <div id="msgPaiement"></div>
+
+      <div class="payment-card page-card">
+        <h2>💳 Paiement de réservation</h2>
+        <div class="payment-info" id="reservationInfo"><div class="loading">Chargement...</div></div>
+
+        <div id="paymentForm">
+          <div class="form-group" style="margin-top:20px;">
+            <label>Méthode de paiement</label>
+            <select id="methode">
+              <option value="carte">💳 Carte bancaire</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Numéro de carte (18 chiffres)</label>
+            <input type="text" id="numeroCarte" class="card-input" maxlength="18" placeholder="123456789012345678" oninput="this.value=this.value.replace(/\D/g,'')">
+            <small style="color:#888;font-size:12px;">Entrez 18 chiffres pour la simulation</small>
+          </div>
+          <div class="payment-total" id="totalAmount">Total : —</div>
+          <button class="btn btn-success btn-lg" onclick="procederPaiement()" id="btnPayer">✅ Confirmer le paiement</button>
+          <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="window.location.href='reservation.html'">← Retour</button>
+        </div>
+
+        <div id="successPanel" style="display:none;text-align:center;padding:30px;">
+          <div style="font-size:4rem;margin-bottom:16px;">🎉</div>
+          <h2 style="color:#28a745;">Paiement réussi !</h2>
+          <p style="color:#666;margin:12px 0;">Votre réservation a été confirmée et votre billet est disponible.</p>
+          <div style="display:flex;gap:12px;justify-content:center;margin-top:20px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="window.location.href='billets.html'">🎟️ Voir mes billets</button>
+            <button class="btn btn-secondary" onclick="window.location.href='reservation.html'">📋 Mes réservations</button>
+          </div>
+        </div>
+
+        <div id="failPanel" style="display:none;text-align:center;padding:30px;">
+          <div style="font-size:4rem;margin-bottom:16px;">❌</div>
+          <h2 style="color:#dc3545;">Paiement refusé</h2>
+          <p style="color:#666;margin:12px 0;">Le paiement n'a pas pu être traité. Veuillez réessayer.</p>
+          <button class="btn btn-warning" style="margin-top:10px;" onclick="resetForm()">🔄 Réessayer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+    function logout() { localStorage.clear(); window.location.href = 'auth.html'; }
+
+    const params = new URLSearchParams(window.location.search);
+    const reservationId = params.get('reservationId');
+    if (!reservationId) window.location.href = 'reservation.html';
+
+    let reservationData = null;
+
+    function showMsg(msg, isError = false) {
+      const el = document.getElementById('msgPaiement');
+      el.className = 'alert ' + (isError ? 'alert-danger' : 'alert-success');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    async function loadReservation() {
+      try {
+        const res = await fetch(`/api/reservations/${reservationId}`, { headers: { Authorization: `Bearer ${token}` } });
+        reservationData = await res.json();
+        const seance = reservationData.seance;
+        const film = seance?.film;
+        const places = reservationData.places ?? [];
+        const total = (seance?.prix ?? 0) * (places.length || reservationData.nombrePlace || 1);
+        document.getElementById('reservationInfo').innerHTML = `
+          <h3>${film?.titre ?? 'Film'}</h3>
+          <p>📅 <strong>Séance :</strong> ${new Date(seance?.dateHeure).toLocaleString('fr-FR')}</p>
+          <p>🏛️ <strong>Salle :</strong> ${seance?.salle?.nom ?? 'N/A'}</p>
+          <p>💺 <strong>Places :</strong> ${places.length ? places.map(p => `Rang ${p.rang}-${p.numero}`).join(', ') : reservationData.nombrePlace + ' place(s)'}</p>
+          <p>💰 <strong>Prix par place :</strong> ${seance?.prix} $</p>`;
+        document.getElementById('totalAmount').textContent = `Total : ${total.toFixed(2)} $`;
+      } catch(e) {
+        document.getElementById('reservationInfo').innerHTML = '<div class="alert alert-danger">Impossible de charger la réservation.</div>';
+      }
+    }
+
+    async function procederPaiement() {
+      const numeroCarte = document.getElementById('numeroCarte').value.trim();
+      if (!/^\d{18}$/.test(numeroCarte)) {
+        showMsg('Le numéro de carte doit contenir exactement 18 chiffres.', true);
+        return;
+      }
+      const btn = document.getElementById('btnPayer');
+      btn.disabled = true;
+      btn.textContent = '⏳ Traitement en cours...';
+      showMsg('Traitement du paiement en cours...', false);
+      try {
+        const res = await fetch('/api/paiements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ reservationId: parseInt(reservationId), numeroCarte })
+        });
+        const data = await res.json();
+        if (res.ok && data.paiement?.statut === 'paye') {
+          document.getElementById('paymentForm').style.display = 'none';
+          document.getElementById('successPanel').style.display = 'block';
+          document.getElementById('msgPaiement').style.display = 'none';
+        } else {
+          document.getElementById('paymentForm').style.display = 'none';
+          document.getElementById('failPanel').style.display = 'block';
+          document.getElementById('msgPaiement').style.display = 'none';
+        }
+      } catch(e) {
+        showMsg('Erreur réseau. Veuillez réessayer.', true);
+        btn.disabled = false;
+        btn.textContent = '✅ Confirmer le paiement';
+      }
+    }
+
+    function resetForm() {
+      document.getElementById('failPanel').style.display = 'none';
+      document.getElementById('paymentForm').style.display = 'block';
+      document.getElementById('btnPayer').disabled = false;
+      document.getElementById('btnPayer').textContent = '✅ Confirmer le paiement';
+      document.getElementById('numeroCarte').value = '';
+      document.getElementById('msgPaiement').style.display = 'none';
+    }
+
+    loadReservation();
+  </script>
+</body>
+</html>

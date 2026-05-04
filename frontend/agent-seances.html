@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestion des Séances - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="agent-films.html">Films</a>
+        <a href="agent-salles.html">Salles</a>
+        <a href="agent-reservations.html">Réservations</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card">
+      <div class="section-title">
+        <h1>📅 Gestion des Séances</h1>
+        <button class="btn btn-primary" onclick="openAddModal()">+ Nouvelle séance</button>
+      </div>
+      <div id="msgSeance"></div>
+      <div id="seancesList"><div class="loading">Chargement...</div></div>
+    </div>
+  </div>
+
+  <div id="seanceModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <h3 id="modalTitle">Nouvelle Séance</h3>
+      <div id="msgModal"></div>
+      <div class="form-group"><label>Film *</label><select id="seanceFilm"><option value="">-- Choisir un film --</option></select></div>
+      <div class="form-group"><label>Salle *</label><select id="seanceSalle"><option value="">-- Choisir une salle --</option></select></div>
+      <div class="form-group"><label>Date et heure *</label><input type="datetime-local" id="seanceDateHeure"></div>
+      <div class="form-group"><label>Prix ($) *</label><input type="number" id="seancePrix" min="1" step="0.5" value="12.00"></div>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button class="btn btn-primary" onclick="saveSeance()">💾 Enregistrer</button>
+        <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+    const roleId = user.roleId ?? user.role?.id;
+    if (roleId == 1) window.location.href = 'index.html';
+    function logout() { localStorage.clear(); window.location.href = 'auth.html'; }
+
+    let editingId = null, allSeances = [];
+
+    function showMsg(id, msg, isError=false) {
+      const el=document.getElementById(id); el.className='alert '+(isError?'alert-danger':'alert-success');
+      el.textContent=msg; el.style.display='block'; setTimeout(()=>el.style.display='none',4000);
+    }
+
+    async function loadOptions() {
+      const [filmsRes, sallesRes] = await Promise.all([
+        fetch('/api/films'),
+        fetch('/api/salles', { headers: { Authorization:`Bearer ${token}` } })
+      ]);
+      const films = await filmsRes.json();
+      const salles = await sallesRes.json();
+      const sf = document.getElementById('seanceFilm');
+      const ss = document.getElementById('seanceSalle');
+      films.forEach(f => sf.innerHTML += `<option value="${f.id}">${f.titre}</option>`);
+      salles.forEach(s => ss.innerHTML += `<option value="${s.id}">${s.nom} (cap. ${s.capacite})</option>`);
+    }
+
+    async function loadSeances() {
+      const res = await fetch('/api/seances', { headers: { Authorization:`Bearer ${token}` } });
+      allSeances = await res.json();
+      if (!Array.isArray(allSeances)) allSeances = [];
+      renderSeances(allSeances);
+    }
+
+    function renderSeances(seances) {
+      if (!seances.length) { document.getElementById('seancesList').innerHTML='<div class="empty-state"><div class="icon">📅</div><p>Aucune séance programmée.</p></div>'; return; }
+      document.getElementById('seancesList').innerHTML = `<table class="data-table">
+        <thead><tr><th>Film</th><th>Salle</th><th>Date & Heure</th><th>Prix</th><th>Places dispo</th><th>Actions</th></tr></thead>
+        <tbody>${seances.map(s=>`
+          <tr>
+            <td><strong>${s.film?.titre??'—'}</strong></td>
+            <td>${s.salle?.nom??'—'}</td>
+            <td>${new Date(s.dateHeure).toLocaleString('fr-FR')}</td>
+            <td>${s.prix} $</td>
+            <td><span class="badge badge-confirmee">${s.placesDisponibles??s.salle?.capacite??'—'}</span></td>
+            <td class="table-actions">
+              <button class="btn btn-warning btn-sm" onclick="openEditModal(${s.id})">✏️</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteSeance(${s.id})">🗑️</button>
+            </td>
+          </tr>`).join('')}
+        </tbody></table>`;
+    }
+
+    function openAddModal() {
+      editingId=null; document.getElementById('modalTitle').textContent='Nouvelle Séance';
+      document.getElementById('seanceFilm').value=''; document.getElementById('seanceSalle').value='';
+      document.getElementById('seanceDateHeure').value=''; document.getElementById('seancePrix').value=12;
+      document.getElementById('seanceModal').style.display='flex';
+    }
+
+    function openEditModal(id) {
+      const s=allSeances.find(s=>s.id===id); if(!s) return; editingId=id;
+      document.getElementById('modalTitle').textContent='Modifier la Séance';
+      document.getElementById('seanceFilm').value=s.film_id;
+      document.getElementById('seanceSalle').value=s.salle_id;
+      const dt=new Date(s.dateHeure); dt.setMinutes(dt.getMinutes()-dt.getTimezoneOffset());
+      document.getElementById('seanceDateHeure').value=dt.toISOString().slice(0,16);
+      document.getElementById('seancePrix').value=s.prix;
+      document.getElementById('seanceModal').style.display='flex';
+    }
+
+    function closeModal() { document.getElementById('seanceModal').style.display='none'; editingId=null; }
+
+    async function saveSeance() {
+      const body={film_id:document.getElementById('seanceFilm').value, salle_id:document.getElementById('seanceSalle').value, dateHeure:document.getElementById('seanceDateHeure').value, prix:parseFloat(document.getElementById('seancePrix').value)};
+      if(!body.film_id||!body.salle_id||!body.dateHeure) { showMsg('msgModal','Tous les champs obligatoires doivent être remplis',true); return; }
+      const url=editingId?`/api/seances/${editingId}`:'/api/seances';
+      const method=editingId?'PUT':'POST';
+      const res=await fetch(url,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify(body)});
+      const data=await res.json();
+      if(res.ok){closeModal();showMsg('msgSeance',editingId?'✅ Séance modifiée !':'✅ Séance créée !');loadSeances();}
+      else showMsg('msgModal',data.message||'Erreur',true);
+    }
+
+    async function deleteSeance(id) {
+      if(!confirm('Supprimer cette séance ?')) return;
+      const res=await fetch(`/api/seances/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});
+      if(res.ok){showMsg('msgSeance','✅ Séance supprimée');loadSeances();}
+      else{const d=await res.json();showMsg('msgSeance',d.message||'Erreur',true);}
+    }
+
+    loadOptions(); loadSeances();
+  </script>
+</body>
+</html>

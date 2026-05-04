@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Films - CinéMax</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <h1 class="nav-title">🎬 CinéMax</h1>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="reservation.html">Mes réservations</a>
+        <a href="billets.html">Mes billets</a>
+        <a href="profil.html">Mon profil</a>
+        <button id="logoutBtn" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="page-card">
+      <div class="section-title">
+        <h1>🎬 Films à l'affiche</h1>
+        <div id="agentBtn" style="display:none;">
+          <a href="agent-films.html" class="btn btn-primary btn-sm">⚙️ Gérer les films</a>
+        </div>
+      </div>
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Rechercher un film..." oninput="filterFilms()">
+        <select id="filterCategorie" onchange="filterFilms()"><option value="">Toutes les catégories</option></select>
+      </div>
+      <div class="films-grid" id="filmsList"><div class="loading">Chargement...</div></div>
+    </div>
+  </div>
+  <script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    const token = localStorage.getItem('token');
+    if (!user || !token) window.location.href = 'auth.html';
+    const roleId = user.roleId ?? user.role?.id;
+    if (roleId >= 2) document.getElementById('agentBtn').style.display = 'block';
+    function logout() { localStorage.clear(); window.location.href = 'auth.html'; }
+
+    let allFilms = [];
+
+    async function loadData() {
+      const [filmsRes, catsRes] = await Promise.all([fetch('/api/films'), fetch('/api/categories')]);
+      allFilms = await filmsRes.json();
+      const cats = await catsRes.json();
+      const sel = document.getElementById('filterCategorie');
+      cats.forEach(c => sel.innerHTML += `<option value="${c.id}">${c.nom}</option>`);
+      renderFilms(allFilms);
+    }
+
+    function filterFilms() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const cat = document.getElementById('filterCategorie').value;
+      let filtered = allFilms;
+      if (cat) filtered = filtered.filter(f => f.categorie_id == cat);
+      if (q) filtered = filtered.filter(f => f.titre.toLowerCase().includes(q) || (f.genre??'').toLowerCase().includes(q));
+      renderFilms(filtered);
+    }
+
+    function renderFilms(films) {
+      const el = document.getElementById('filmsList');
+      if (!films.length) { el.innerHTML = '<div class="empty-state"><div class="icon">🎬</div><p>Aucun film trouvé.</p></div>'; return; }
+      el.innerHTML = films.map(f => `
+        <div class="film-card">
+          <span class="genre-badge">${f.categorie?.nom ?? f.genre ?? 'Cinéma'}</span>
+          <h3>${f.titre}</h3>
+          <p class="film-meta">⏱ ${f.duree_min} min &nbsp;|&nbsp; ${f.classification ?? 'Tous publics'}</p>
+          <p style="font-size:13px;color:#666;margin-bottom:14px;">${(f.description??'').substring(0,120)}${(f.description?.length??0)>120?'...':''}</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" onclick="window.location.href='seances.html?film_id=${f.id}'">🎫 Réserver</button>
+            <button class="btn btn-secondary btn-sm" onclick="window.location.href='film-detail.html?id=${f.id}'">ℹ️ Détails</button>
+          </div>
+        </div>`).join('');
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
