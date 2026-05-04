@@ -23,6 +23,7 @@ const getSalles = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Erreur lors de la récupération des salles",
+      detail: error.message
     });
   }
 };

@@ -38,7 +38,7 @@ const getAllSeances = async (req, res) => {
     res.status(200).json(seances);
   } catch (error) {
     res.status(500).json({
-      message: "Erreur lors de la récupération des séances",
+      message: "Erreur lors de la récupération des séances", detail: error.message,
     });
   }
 };
