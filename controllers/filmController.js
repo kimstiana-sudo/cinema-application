@@ -23,6 +23,8 @@ const getAllFilms = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Erreur lors de la récupération des films",
+      detail: error.message,
+      stack: error.stack
     });
   }
 };
