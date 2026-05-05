@@ -39,6 +39,14 @@ app.use("/api", billetRoutes);
 app.use("/api", userRoutes);
 
 // Debug middleware
+
+// Documentation Swagger
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
+  customCss: '.swagger-ui .topbar { background-color: #333; }',
+  customSiteTitle: 'API Cinéma - Documentation'
+}));
+app.get('/api-docs.json', (req, res) => res.json(swaggerSpecs));
+
 app.use('/api', (req, res, next) => {
   console.log(`${req.method} ${req.path}`, req.body);
   next();
@@ -67,7 +75,7 @@ sequelize
     return createRoles();
   })
   .then(() => {
-    app.listen(3000, () => {
+    app.listen(PORT, () => {
       console.log("Serveur démarré sur http://localhost:3000");
     });
   })

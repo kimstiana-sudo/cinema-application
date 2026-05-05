@@ -22,13 +22,13 @@
   <div class="container">
     <div class="page-card">
       <div class="section-title">
-        <h1>🎬 Films à l'affiche</h1>
+        <h1> Films à l'affiche</h1>
         <div id="agentBtn" style="display:none;">
-          <a href="agent-films.html" class="btn btn-primary btn-sm">⚙️ Gérer les films</a>
+          <a href="agent-films.html" class="btn btn-primary btn-sm"> Gérer les films</a>
         </div>
       </div>
       <div class="search-bar">
-        <input type="text" id="searchInput" placeholder="Rechercher un film..." oninput="filterFilms()">
+      <input type="text" id="searchInput" placeholder="Rechercher un film..." oninput="filterFilms()"> 
         <select id="filterCategorie" onchange="filterFilms()"><option value="">Toutes les catégories</option></select>
       </div>
       <div class="films-grid" id="filmsList"><div class="loading">Chargement...</div></div>
@@ -72,8 +72,8 @@
           <p class="film-meta">⏱ ${f.duree_min} min &nbsp;|&nbsp; ${f.classification ?? 'Tous publics'}</p>
           <p style="font-size:13px;color:#666;margin-bottom:14px;">${(f.description??'').substring(0,120)}${(f.description?.length??0)>120?'...':''}</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-primary btn-sm" onclick="window.location.href='seances.html?film_id=${f.id}'">🎫 Réserver</button>
-            <button class="btn btn-secondary btn-sm" onclick="window.location.href='film-detail.html?id=${f.id}'">ℹ️ Détails</button>
+            <button class="btn btn-primary btn-sm" onclick="window.location.href='seances.html?film_id=${f.id}'"> Réserver</button>
+            <button class="btn btn-secondary btn-sm" onclick="window.location.href='film-detail.html?id=${f.id}'"> Détails</button>
           </div>
         </div>`).join('');
     }
